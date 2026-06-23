@@ -2,6 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 export type WorkflowWriteStatus = "created" | "unchanged";
+export type WorkflowStatus = "different" | "missing" | "unchanged";
 
 export type WorkflowWriteResult = {
   path: string;
@@ -95,6 +96,24 @@ export async function writeOpenWikiUpdateWorkflow(
     path: openWikiWorkflowPath,
     status: "created",
   };
+}
+
+export async function getOpenWikiUpdateWorkflowStatus(
+  cwd = process.cwd(),
+): Promise<WorkflowStatus> {
+  const workflowFilePath = path.join(cwd, openWikiWorkflowPath);
+
+  try {
+    const currentContent = await readFile(workflowFilePath, "utf8");
+
+    return currentContent === workflowContent ? "unchanged" : "different";
+  } catch (error) {
+    if (isFileNotFoundError(error)) {
+      return "missing";
+    }
+
+    throw error;
+  }
 }
 
 function isFileNotFoundError(error: unknown): boolean {

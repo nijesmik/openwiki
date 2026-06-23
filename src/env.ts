@@ -7,6 +7,18 @@ export const openWikiEnvPath = path.join(openWikiEnvDir, ".env");
 
 type EnvMap = Record<string, string>;
 
+export type CredentialDiagnostic = {
+  key: "LANGSMITH_API_KEY" | "OPENAI_API_KEY";
+  source:
+    | "process.env"
+    | "~/.openwiki/.env"
+    | "process.env over ~/.openwiki/.env"
+    | "unset";
+  length: number | null;
+  preview: string;
+  warnings: string[];
+};
+
 const managedEnvKeys = [
   "OPENAI_API_KEY",
   "LANGSMITH_API_KEY",
@@ -24,6 +36,17 @@ export async function loadOpenWikiEnv(): Promise<EnvMap> {
   }
 
   return env;
+}
+
+export async function getCredentialDiagnostics(): Promise<
+  CredentialDiagnostic[]
+> {
+  const fileEnv = await readOpenWikiEnv();
+
+  return [
+    createCredentialDiagnostic("OPENAI_API_KEY", fileEnv),
+    createCredentialDiagnostic("LANGSMITH_API_KEY", fileEnv),
+  ];
 }
 
 export async function saveOpenWikiEnv(updates: EnvMap): Promise<void> {
@@ -48,6 +71,83 @@ export async function saveOpenWikiEnv(updates: EnvMap): Promise<void> {
   for (const [key, value] of Object.entries(updates)) {
     process.env[key] = value;
   }
+}
+
+function createCredentialDiagnostic(
+  key: CredentialDiagnostic["key"],
+  fileEnv: EnvMap,
+): CredentialDiagnostic {
+  const processValue = process.env[key];
+  const fileValue = fileEnv[key];
+  const value = processValue ?? fileValue;
+  const source = getCredentialSource(processValue, fileValue);
+
+  if (value === undefined) {
+    return {
+      key,
+      source,
+      length: null,
+      preview: "<unset>",
+      warnings: [],
+    };
+  }
+
+  return {
+    key,
+    source,
+    length: value.length,
+    preview: createCredentialPreview(value),
+    warnings: getCredentialWarnings(value),
+  };
+}
+
+function getCredentialSource(
+  processValue: string | undefined,
+  fileValue: string | undefined,
+): CredentialDiagnostic["source"] {
+  if (processValue !== undefined && fileValue !== undefined) {
+    return "process.env over ~/.openwiki/.env";
+  }
+
+  if (processValue !== undefined) {
+    return "process.env";
+  }
+
+  if (fileValue !== undefined) {
+    return "~/.openwiki/.env";
+  }
+
+  return "unset";
+}
+
+function createCredentialPreview(value: string): string {
+  if (value.length <= 10) {
+    return JSON.stringify("*".repeat(value.length));
+  }
+
+  return JSON.stringify(`${value.slice(0, 6)}...${value.slice(-4)}`);
+}
+
+function getCredentialWarnings(value: string): string[] {
+  const warnings: string[] = [];
+
+  if (value !== value.trim()) {
+    warnings.push("leading/trailing whitespace");
+  }
+
+  if (value.includes("\n") || value.includes("\r")) {
+    warnings.push("contains newline");
+  }
+
+  if (value.includes('"') || value.includes("'")) {
+    warnings.push("contains quote character");
+  }
+
+  if (/\[[^\]]+\]/u.test(value)) {
+    warnings.push("contains bracketed suffix/text");
+  }
+
+  return warnings;
 }
 
 async function readOpenWikiEnv(): Promise<EnvMap> {

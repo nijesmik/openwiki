@@ -1,9 +1,11 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Box, Text, useInput } from "ink";
 import { openWikiEnvPath, saveOpenWikiEnv } from "./env.js";
 import {
+  getOpenWikiUpdateWorkflowStatus,
   openWikiWorkflowPath,
   writeOpenWikiUpdateWorkflow,
+  type WorkflowStatus,
   type WorkflowWriteStatus,
 } from "./github-action.js";
 
@@ -24,6 +26,9 @@ type InitSetupProps = {
 };
 
 type PromptStep = "openai" | "langsmith" | "workflow";
+type WorkflowSetupState =
+  | { status: "loading" }
+  | { status: "ready"; workflowStatus: WorkflowStatus };
 
 export function needsCredentialSetup(): boolean {
   return (
@@ -32,15 +37,62 @@ export function needsCredentialSetup(): boolean {
 }
 
 export function InitSetup({ onComplete, onError }: InitSetupProps) {
-  const [step, setStep] = useState<PromptStep>(getInitialStep);
+  const [workflowSetupState, setWorkflowSetupState] =
+    useState<WorkflowSetupState>({
+      status: "loading",
+    });
+  const [step, setStep] = useState<PromptStep | null>(null);
   const [openAIKey, setOpenAIKey] = useState<string | null>(null);
   const [langSmithKey, setLangSmithKey] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
+  useEffect(() => {
+    let isMounted = true;
+
+    getOpenWikiUpdateWorkflowStatus()
+      .then((workflowStatus) => {
+        if (!isMounted) {
+          return;
+        }
+
+        setWorkflowSetupState({
+          status: "ready",
+          workflowStatus,
+        });
+
+        const initialStep = getInitialStep(workflowStatus);
+
+        if (initialStep === null) {
+          onComplete({
+            savedOpenAIKey: false,
+            savedLangSmithKey: false,
+            workflow: {
+              path: openWikiWorkflowPath,
+              status: "unchanged",
+            },
+          });
+          return;
+        }
+
+        setStep(initialStep);
+      })
+      .catch((setupError: unknown) => {
+        onError(
+          setupError instanceof Error
+            ? setupError.message
+            : "Failed to inspect OpenWiki setup.",
+        );
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [onComplete, onError]);
+
   useInput((inputValue, key) => {
-    if (isSaving) {
+    if (isSaving || step === null) {
       return;
     }
 
@@ -72,15 +124,40 @@ export function InitSetup({ onComplete, onError }: InitSetupProps) {
 
       setOpenAIKey(trimmedInput);
       setInput("");
-      setStep(
-        process.env.LANGSMITH_API_KEY === undefined ? "langsmith" : "workflow",
-      );
+
+      if (process.env.LANGSMITH_API_KEY === undefined) {
+        setStep("langsmith");
+        return;
+      }
+
+      if (isExistingWorkflowUnchanged(workflowSetupState)) {
+        await completeSetup({
+          nextOpenAIKey: trimmedInput,
+          nextLangSmithKey: langSmithKey,
+          workflowAction: "unchanged",
+        });
+        return;
+      }
+
+      setStep("workflow");
       return;
     }
 
     if (step === "langsmith") {
-      setLangSmithKey(input.trim());
+      const nextLangSmithKey = input.trim();
+
+      setLangSmithKey(nextLangSmithKey);
       setInput("");
+
+      if (isExistingWorkflowUnchanged(workflowSetupState)) {
+        await completeSetup({
+          nextOpenAIKey: openAIKey,
+          nextLangSmithKey,
+          workflowAction: "unchanged",
+        });
+        return;
+      }
+
       setStep("workflow");
       return;
     }
@@ -92,17 +169,35 @@ export function InitSetup({ onComplete, onError }: InitSetupProps) {
       return;
     }
 
+    await completeSetup({
+      nextOpenAIKey: openAIKey,
+      nextLangSmithKey: langSmithKey,
+      workflowAction: shouldCreateWorkflow ? "create" : "skip",
+    });
+  }
+
+  type CompleteSetupOptions = {
+    nextOpenAIKey: string | null;
+    nextLangSmithKey: string | null;
+    workflowAction: "create" | "skip" | "unchanged";
+  };
+
+  async function completeSetup({
+    nextOpenAIKey,
+    nextLangSmithKey,
+    workflowAction,
+  }: CompleteSetupOptions) {
     setIsSaving(true);
 
     try {
       const updates: Record<string, string> = {};
 
-      if (openAIKey !== null) {
-        updates.OPENAI_API_KEY = openAIKey;
+      if (nextOpenAIKey !== null) {
+        updates.OPENAI_API_KEY = nextOpenAIKey;
       }
 
-      if (langSmithKey !== null && langSmithKey.length > 0) {
-        updates.LANGSMITH_API_KEY = langSmithKey;
+      if (nextLangSmithKey !== null && nextLangSmithKey.length > 0) {
+        updates.LANGSMITH_API_KEY = nextLangSmithKey;
         updates.LANGCHAIN_PROJECT = "openwiki";
         updates.LANGCHAIN_TRACING_V2 = "true";
       }
@@ -111,16 +206,21 @@ export function InitSetup({ onComplete, onError }: InitSetupProps) {
         await saveOpenWikiEnv(updates);
       }
 
-      const workflow = shouldCreateWorkflow
-        ? await writeOpenWikiUpdateWorkflow()
-        : {
-            path: openWikiWorkflowPath,
-            status: "skipped" as const,
-          };
+      const workflow =
+        workflowAction === "create"
+          ? await writeOpenWikiUpdateWorkflow()
+          : {
+              path: openWikiWorkflowPath,
+              status:
+                workflowAction === "unchanged"
+                  ? ("unchanged" as const)
+                  : ("skipped" as const),
+            };
 
       onComplete({
-        savedOpenAIKey: openAIKey !== null,
-        savedLangSmithKey: langSmithKey !== null && langSmithKey.length > 0,
+        savedOpenAIKey: nextOpenAIKey !== null,
+        savedLangSmithKey:
+          nextLangSmithKey !== null && nextLangSmithKey.length > 0,
         workflow,
       });
     } catch (saveError) {
@@ -133,27 +233,147 @@ export function InitSetup({ onComplete, onError }: InitSetupProps) {
   }
 
   const needsCredentialPrompt = needsCredentialSetup();
+  const workflowStatus =
+    workflowSetupState.status === "ready"
+      ? workflowSetupState.workflowStatus
+      : "missing";
 
   return (
     <Box flexDirection="column">
-      <Text>OpenWiki init setup</Text>
-      {needsCredentialPrompt ? (
-        <Text>Credentials will be saved to {openWikiEnvPath}</Text>
-      ) : null}
-      <Text>GitHub Action path: {openWikiWorkflowPath}</Text>
-      <Box marginTop={1}>
-        <Prompt step={step} input={input} />
+      <SetupHeader />
+
+      <Box flexDirection="column" marginBottom={1}>
+        <SetupStep
+          label="OpenAI key"
+          state={
+            process.env.OPENAI_API_KEY
+              ? "done"
+              : step === "openai"
+                ? "current"
+                : "pending"
+          }
+          detail={
+            process.env.OPENAI_API_KEY
+              ? "available from environment"
+              : `save to ${openWikiEnvPath}`
+          }
+        />
+        <SetupStep
+          label="LangSmith"
+          state={
+            process.env.LANGSMITH_API_KEY !== undefined
+              ? "done"
+              : step === "langsmith"
+                ? "current"
+                : "optional"
+          }
+          detail={
+            process.env.LANGSMITH_API_KEY !== undefined
+              ? "available from environment"
+              : "optional tracing key"
+          }
+        />
+        <SetupStep
+          label="GitHub Action"
+          state={
+            workflowStatus === "unchanged"
+              ? "done"
+              : step === "workflow"
+                ? "current"
+                : "pending"
+          }
+          detail={openWikiWorkflowPath}
+        />
       </Box>
+
+      <SetupPanel title="Prompt">
+        {step ? (
+          <Prompt step={step} input={input} />
+        ) : (
+          <Text>Inspecting existing OpenWiki setup...</Text>
+        )}
+      </SetupPanel>
+
+      {needsCredentialPrompt ? (
+        <Text color="gray">Secrets are masked and saved only after setup.</Text>
+      ) : null}
+
       {error ? (
-        <Box marginTop={1}>
+        <SetupPanel title="Error">
           <Text color="red">{error}</Text>
-        </Box>
+        </SetupPanel>
       ) : null}
       {isSaving ? (
-        <Box marginTop={1}>
-          <Text>Saving OpenWiki setup...</Text>
-        </Box>
+        <SetupPanel title="Saving">
+          <Text>Writing OpenWiki setup...</Text>
+        </SetupPanel>
       ) : null}
+    </Box>
+  );
+}
+
+function SetupHeader() {
+  return (
+    <Box
+      borderStyle="round"
+      borderColor="cyan"
+      flexDirection="column"
+      marginBottom={1}
+      paddingX={1}
+    >
+      <Text>
+        <Text bold color="cyan">
+          OpenWiki
+        </Text>{" "}
+        <Text color="gray">init setup</Text>
+      </Text>
+      <Text>Configure local credentials and scheduled updates.</Text>
+    </Box>
+  );
+}
+
+type SetupStepProps = {
+  label: string;
+  state: "current" | "done" | "optional" | "pending";
+  detail: string;
+};
+
+function SetupStep({ label, state, detail }: SetupStepProps) {
+  const color =
+    state === "done"
+      ? "green"
+      : state === "current"
+        ? "yellow"
+        : state === "optional"
+          ? "cyan"
+          : "gray";
+
+  return (
+    <Text>
+      <Text color={color}>[{state.toUpperCase()}]</Text>{" "}
+      <Text bold>{label.padEnd(14)}</Text> <Text color="gray">{detail}</Text>
+    </Text>
+  );
+}
+
+type SetupPanelProps = {
+  title: string;
+  children: React.ReactNode;
+};
+
+function SetupPanel({ title, children }: SetupPanelProps) {
+  return (
+    <Box
+      borderStyle="single"
+      borderColor="gray"
+      flexDirection="column"
+      marginTop={1}
+      paddingX={1}
+    >
+      <Text bold color="cyan">
+        {title}
+      </Text>
+      {children}
     </Box>
   );
 }
@@ -165,25 +385,32 @@ type PromptProps = {
 
 function Prompt({ step, input }: PromptProps) {
   if (step === "openai") {
-    return <Text>OpenAI API key: {mask(input)}</Text>;
+    return (
+      <Text>
+        <Text color="gray">$</Text> OPENAI_API_KEY={" "}
+        <Text color="yellow">{mask(input)}</Text>
+      </Text>
+    );
   }
 
   if (step === "langsmith") {
     return (
       <Text>
-        LangSmith API key (optional, press Enter to skip): {mask(input)}
+        <Text color="gray">$</Text> LANGSMITH_API_KEY optional={" "}
+        <Text color="yellow">{mask(input)}</Text>
       </Text>
     );
   }
 
   return (
     <Text>
-      Create update GitHub Action at {openWikiWorkflowPath}? [Y/n]: {input}
+      <Text color="gray">$</Text> Create update GitHub Action?{" "}
+      <Text color="cyan">Y/n</Text> {input}
     </Text>
   );
 }
 
-function getInitialStep(): PromptStep {
+function getInitialStep(workflowStatus: WorkflowStatus): PromptStep | null {
   if (!process.env.OPENAI_API_KEY) {
     return "openai";
   }
@@ -192,7 +419,20 @@ function getInitialStep(): PromptStep {
     return "langsmith";
   }
 
+  if (workflowStatus === "unchanged") {
+    return null;
+  }
+
   return "workflow";
+}
+
+function isExistingWorkflowUnchanged(
+  workflowSetupState: WorkflowSetupState,
+): boolean {
+  return (
+    workflowSetupState.status === "ready" &&
+    workflowSetupState.workflowStatus === "unchanged"
+  );
 }
 
 function parseWorkflowAnswer(value: string): boolean | null {
