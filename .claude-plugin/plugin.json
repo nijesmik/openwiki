@@ -1,0 +1,12 @@
+{
+  "name": "openwiki",
+  "version": "0.0.1",
+  "description": "Generate and maintain OpenWiki documentation for a codebase. Claude Code plugin packaging of langchain-ai/openwiki with the original prompts preserved verbatim.",
+  "author": {
+    "name": "nijesmik"
+  },
+  "homepage": "https://github.com/nijesmik/openwiki",
+  "repository": "https://github.com/nijesmik/openwiki",
+  "license": "MIT",
+  "keywords": ["documentation", "wiki", "agents", "openwiki"]
+}

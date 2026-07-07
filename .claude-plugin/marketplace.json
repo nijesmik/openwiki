@@ -1,0 +1,14 @@
+{
+  "name": "openwiki",
+  "owner": {
+    "name": "nijesmik"
+  },
+  "description": "OpenWiki as a Claude Code plugin: generate and maintain agent-friendly documentation for a codebase.",
+  "plugins": [
+    {
+      "name": "openwiki",
+      "source": "./",
+      "description": "Generate and maintain OpenWiki documentation for a codebase. Claude Code plugin packaging of langchain-ai/openwiki with the original prompts preserved verbatim."
+    }
+  ]
+}
