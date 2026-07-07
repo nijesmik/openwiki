@@ -14,7 +14,7 @@ In Claude Code:
 
 ```
 /plugin marketplace add nijesmik/openwiki
-/plugin install openwiki@openwiki
+/plugin install openwiki@nijesmik
 ```
 
 ## Usage
