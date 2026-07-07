@@ -36,11 +36,11 @@ An optional trailing `message` is passed to the run as an additional user instru
 | `openwiki --update` | `/openwiki:update` command ([plugin/commands/update.md](./plugin/commands/update.md)) |
 | Interactive chat (`openwiki`) | Claude Code itself |
 | System/user prompts (`src/agent/prompt.ts`) | Inlined verbatim into the command files |
-| Git evidence block (`createGitSummary` in `src/agent/utils.ts`) | [plugin/scripts/git-summary.sh](./plugin/scripts/git-summary.sh), injected into the command prompt |
-| Run metadata `openwiki/.last-update.json` (`writeLastUpdateMetadata`) | [plugin/scripts/last-update.sh](./plugin/scripts/last-update.sh), run by the agent at the end of a run |
+| Git evidence block (`createGitSummary` in `src/agent/utils.ts`) | Transparent `git` commands injected into the command prompt via `!` |
+| Run metadata `openwiki/.last-update.json` (`writeLastUpdateMetadata`) | Written by the agent at the end of a run |
 | Provider/model/API-key configuration, `~/.openwiki/.env` | Not needed — Claude Code's own model is used |
 
-The plugin itself lives entirely under [`plugin/`](./plugin), so installing it does not pull in the upstream CLI source. The only prompt changes from upstream are the ones the runtime swap forces: virtual repo-rooted paths (`/openwiki/...`) became repository-relative paths, deepagents tool names (`read_file`, `write_file`, `edit_file`, `task`) became Claude Code tool names (`Read`, `Write`, `Edit`, `Task`), the CLI reference section became a plugin command reference, and run metadata is recorded via `plugin/scripts/last-update.sh` instead of by the CLI. Everything else is verbatim.
+The plugin itself lives entirely under [`plugin/`](./plugin), so installing it does not pull in the upstream CLI source. The only prompt changes from upstream are the ones the runtime swap forces: virtual repo-rooted paths (`/openwiki/...`) became repository-relative paths, deepagents tool names (`read_file`, `write_file`, `edit_file`, `task`) became Claude Code tool names (`Read`, `Write`, `Edit`, `Task`), the CLI reference section became a plugin command reference, the git evidence block is gathered by injecting transparent `git` commands (each pre-authorized in the command's `allowed-tools`) instead of a wrapper script, and run metadata is written by the agent instead of by the CLI. Everything else is verbatim.
 
 ## License
 

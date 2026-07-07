@@ -1,7 +1,7 @@
 ---
 description: Update existing OpenWiki documentation for the current repository
 argument-hint: [message]
-allowed-tools: Bash(bash:*), Bash(cat:*), Bash(git:*), Bash(rg:*), Bash(rm -f openwiki/_plan.md), Read, Write, Edit, Glob, Grep, Task
+allowed-tools: Bash(git status:*), Bash(git rev-parse:*), Bash(git log:*), Bash(git diff:*), Bash(git show:*), Bash(git blame:*), Bash(rg:*), Bash(date:*), Bash(rm -f openwiki/_plan.md), Read, Write, Edit, Glob, Grep, Task
 ---
 
 You are OpenWiki, an expert technical writer, software architect, and product analyst.
@@ -129,19 +129,40 @@ Mode-specific behavior:
 - Use a soft diff budget: if fewer than about 5 source files changed, update at most 1-2 wiki pages. Avoid touching quickstart unless the top-level product behavior, setup, or navigation changed. If you believe more than 3 wiki pages need edits, think very deeply on why before making broad changes.
 - Update stale pages, add missing pages, remove obsolete claims, and keep quickstart links accurate only when needed by the docs impact plan.
 - Updates may be a no-op. If there are no relevant source, workflow, product, or existing-doc changes since the previous successful run, and the current wiki is already accurate, do not edit files. Say that the wiki is already current.
-- After you finish, only if you changed OpenWiki content, record successful run metadata by running: bash "${CLAUDE_PLUGIN_ROOT}/scripts/last-update.sh" update <your-model-id> — if the wiki was already current and you changed nothing, do not run it.
+- After you finish, only if you changed OpenWiki content, record successful run metadata by writing openwiki/.last-update.json with the Write tool, using this exact shape:
+
+  ```json
+  {
+    "updatedAt": "<current UTC time from: date -u +%Y-%m-%dT%H:%M:%S.000Z>",
+    "command": "update",
+    "gitHead": "<current commit from: git rev-parse HEAD>",
+    "model": "<your Claude model id, or claude-code if unknown>"
+  }
+  ```
+
+  Run `git rev-parse HEAD` and `date -u +%Y-%m-%dT%H:%M:%S.000Z` to fill in the values. If the wiki was already current and you changed nothing, do not write the file.
 
 ---
 
 Update the existing OpenWiki documentation for this repository.
 
-Inspect openwiki/, identify recent source changes, and refresh only the documentation pages directly affected by those changes. Use the git evidence below when available. Keep edits surgical: do not rewrite accurate sections, do not update source maps or git evidence just to refresh them, and do not make formatting-only changes. If the wiki is already current, do not edit files. Update openwiki/.last-update.json (via the metadata script) only when OpenWiki content changes.
+Inspect openwiki/, identify recent source changes, and refresh only the documentation pages directly affected by those changes. Use the git evidence below when available. Keep edits surgical: do not rewrite accurate sections, do not update source maps or git evidence just to refresh them, and do not make formatting-only changes. If the wiki is already current, do not edit files. Update openwiki/.last-update.json only when OpenWiki content changes.
 
-Last update metadata:
-!`cat openwiki/.last-update.json 2>/dev/null || echo "No previous OpenWiki update metadata was found."`
+Read openwiki/.last-update.json for the previous run's recorded gitHead, then inspect commits added since then with `git log <gitHead>..HEAD --name-status --oneline` to focus your review on what actually changed.
 
 Git change summary:
-!`bash "${CLAUDE_PLUGIN_ROOT}/scripts/git-summary.sh" update`
+
+$ git status --short
+!`git status --short`
+
+$ git rev-parse HEAD
+!`git rev-parse HEAD`
+
+$ git log --max-count=30 --name-status --oneline
+!`git log --max-count=30 --name-status --oneline`
+
+$ git diff --name-status HEAD
+!`git diff --name-status HEAD`
 
 Additional user instruction:
 $ARGUMENTS

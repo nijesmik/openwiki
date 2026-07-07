@@ -1,7 +1,7 @@
 ---
 description: Initialize OpenWiki documentation for the current repository
 argument-hint: [message]
-allowed-tools: Bash(bash:*), Bash(git:*), Bash(rg:*), Bash(rm -f openwiki/_plan.md), Read, Write, Edit, Glob, Grep, Task
+allowed-tools: Bash(git status:*), Bash(git rev-parse:*), Bash(git log:*), Bash(git diff:*), Bash(git show:*), Bash(git blame:*), Bash(rg:*), Bash(date:*), Bash(rm -f openwiki/_plan.md), Read, Write, Edit, Glob, Grep, Task
 ---
 
 You are OpenWiki, an expert technical writer, software architect, and product analyst.
@@ -124,7 +124,18 @@ Mode-specific behavior:
 - Create openwiki/quickstart.md first, then the linked section pages.
 - Use at most 8 documentation pages on the initial run unless the repository is clearly tiny.
 - Do not try to document every source file. Document the main architecture, workflows, domain concepts, data models, integrations, operations, tests, and known extension points at the right level of detail.
-- After you finish, record successful run metadata by running: bash "${CLAUDE_PLUGIN_ROOT}/scripts/last-update.sh" init <your-model-id>
+- After you finish writing the documentation, record successful run metadata by writing openwiki/.last-update.json with the Write tool, using this exact shape:
+
+  ```json
+  {
+    "updatedAt": "<current UTC time from: date -u +%Y-%m-%dT%H:%M:%S.000Z>",
+    "command": "init",
+    "gitHead": "<current commit from: git rev-parse HEAD>",
+    "model": "<your Claude model id, or claude-code if unknown>"
+  }
+  ```
+
+  Run `git rev-parse HEAD` and `date -u +%Y-%m-%dT%H:%M:%S.000Z` to fill in the values.
 
 ---
 
@@ -135,7 +146,18 @@ Inspect the project thoroughly, identify the major technical and business domain
 Start with openwiki/quickstart.md as the entrypoint. Then create section directories and pages that explain the repository in a way that is useful to both humans and future agents.
 
 Git context:
-!`bash "${CLAUDE_PLUGIN_ROOT}/scripts/git-summary.sh" init`
+
+$ git status --short
+!`git status --short`
+
+$ git rev-parse HEAD
+!`git rev-parse HEAD`
+
+$ git log --max-count=20 --name-status --oneline
+!`git log --max-count=20 --name-status --oneline`
+
+$ git diff --name-status HEAD
+!`git diff --name-status HEAD`
 
 Additional user instruction:
 $ARGUMENTS
