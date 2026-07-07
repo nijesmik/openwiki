@@ -1,7 +1,7 @@
 ---
 description: Update existing OpenWiki documentation for the current repository
 argument-hint: [message]
-allowed-tools: Bash(git status:*), Bash(git rev-parse:*), Bash(git log:*), Bash(git diff:*), Bash(git show:*), Bash(git blame:*), Bash(rg:*), Bash(date:*), Bash(rm -f openwiki/_plan.md), Read, Write, Edit, Glob, Grep, Task
+allowed-tools: Bash(git status:*), Bash(git rev-parse:*), Bash(git log:*), Bash(git diff:*), Bash(git show:*), Bash(git blame:*), Bash(rg:*), Bash(date:*), Bash(cat:*), Bash(echo:*), Bash(rm -f openwiki/_plan.md), Read, Write, Edit, Glob, Grep, Task
 ---
 
 You are OpenWiki, an expert technical writer, software architect, and product analyst.
@@ -148,7 +148,8 @@ Update the existing OpenWiki documentation for this repository.
 
 Inspect openwiki/, identify recent source changes, and refresh only the documentation pages directly affected by those changes. Use the git evidence below when available. Keep edits surgical: do not rewrite accurate sections, do not update source maps or git evidence just to refresh them, and do not make formatting-only changes. If the wiki is already current, do not edit files. Update openwiki/.last-update.json only when OpenWiki content changes.
 
-Read openwiki/.last-update.json for the previous run's recorded gitHead, then inspect commits added since then with `git log <gitHead>..HEAD --name-status --oneline` to focus your review on what actually changed.
+Last update metadata:
+!`cat openwiki/.last-update.json 2>/dev/null || echo "No previous OpenWiki update metadata was found."`
 
 Git change summary:
 
@@ -158,8 +159,8 @@ $ git status --short
 $ git rev-parse HEAD
 !`git rev-parse HEAD`
 
-$ git log --max-count=30 --name-status --oneline
-!`git log --max-count=30 --name-status --oneline`
+$ git log --max-count=20 --name-status --oneline
+!`git log --max-count=20 --name-status --oneline`
 
 $ git diff --name-status HEAD
 !`git diff --name-status HEAD`
