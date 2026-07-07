@@ -7,7 +7,7 @@
   "plugins": [
     {
       "name": "openwiki",
-      "source": "./",
+      "source": "./plugin",
       "description": "Generate and maintain OpenWiki documentation for a codebase. Claude Code plugin packaging of langchain-ai/openwiki with the original prompts preserved verbatim."
     }
   ]
