@@ -10,10 +10,10 @@ This fork packages [langchain-ai/openwiki](https://github.com/langchain-ai/openw
 
 ## Install
 
-In Claude Code:
+In Claude Code, add the [nijesmik/plugins](https://github.com/nijesmik/plugins) marketplace, then install:
 
 ```
-/plugin marketplace add nijesmik/openwiki
+/plugin marketplace add nijesmik/plugins
 /plugin install openwiki@nijesmik
 ```
 
